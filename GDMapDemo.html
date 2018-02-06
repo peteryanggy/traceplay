@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>高德地图巡航示例</title>
+
+    <style>
+        html,
+        body,
+        #container {
+            width: 100%;
+            height: 100%;
+            margin: 0px;
+        }
+    </style>
+
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+
+    <!--引入高德地图JSAPI -->
+    <script src="//webapi.amap.com/maps?v=1.3&key=61b1e7255e7b3c83410a06ae4362a463"></script>
+
+    <!--引入UI组件库（1.0版本） -->
+    <script src="//webapi.amap.com/ui/1.0/main.js"></script>
+</head>
+<body>
+    <div id="container">
+
+    </div>
+
+    <div>
+        <button onclick="search()">查询轨迹</button>
+        <p id="info"></p>
+        <hr>
+        <button onclick="startPlay()">开始</button>
+        <button onclick="stopPlay()">停止</button>
+        <button onclick="pausePlay()">暂停</button>
+        <button onclick="resumePlay()">恢复</button>
+        <button onclick="reset()">设置至起始位置</button>
+        <button onclick="removedMarkers()">删除地图图标</button>
+        <button onclick="prepoint()">上一个点</button>
+        <button onclick="nextpoint()">下一个点</button>
+    </div>
+</body>
+</html>
+
+<script>
+    //创建地图
+    let map = new AMap.Map('container', {
+        zoom: 10
+    });
+
+    let navg = null;
+    let pathSimplifierIns = null;
+    let _SimpleInfoWindow = null;
+
+    window.onload = function () {
+        //加载PathSimplifier，loadUI的路径参数为模块名中 'ui/' 之后的部分
+        AMapUI.load(['ui/misc/PathSimplifier',  //PathSimplifier
+                     'ui/overlay/SimpleMarker',    //SimpleMarker
+                     'ui/overlay/SimpleInfoWindow', //SimpleInfoWindow
+                     'lib/$'//JQuery库,简单信息窗口依赖于该库
+                    ], function(PathSimplifier, SimpleMarker, SimpleInfoWindow, $) {
+
+            if (!PathSimplifier.supportCanvas) {
+                alert('当前环境不支持 Canvas！');
+                return;
+            }
+
+            //启动页面
+            initPage(PathSimplifier, SimpleMarker, SimpleInfoWindow);
+        });
+
+
+        function initPage(PathSimplifier, SimpleMarker, SimpleInfoWindow) {
+            //创建巡航组件实例
+            pathSimplifierIns = new PathSimplifier({
+                zIndex: 100,
+                map: map, //所属的地图实例
+                getPath: function(pathData, pathIndex) {
+                    //返回轨迹数据中的节点坐标信息，[AMap.LngLat, AMap.LngLat...] 或者 [[lng|number,lat|number],...]
+                    return pathData.path;
+                },
+                getHoverTitle: function(pathData, pathIndex, pointIndex) {
+                    //返回鼠标悬停时显示的信息
+                    if (pointIndex >= 0) {
+
+                        //let point = getOriginalData(pathIndex, pointIndex);
+                        //let info = `[${point.Lon + point.OffsetLon},${point.Lat + point.OffsetLat}],${point.Speed}km/h,${point.Mileage}km,` +
+                        //    `LT:${point.LocateTime},RT:${point.ReceivedTime}`;
+
+                        //return info;
+
+                        //鼠标悬停在某个轨迹节点上
+                        return pathData.name + '，点:' + pointIndex + '/' + pathData.path.length;
+                    }
+                    //鼠标悬停在节点之间的连线上
+                    return pathData.name + '，点数量' + pathData.path.length;
+                },
+                renderOptions: {
+                    //轨迹线的样式
+                    pathLineStyle: {
+                        strokeStyle: 'blue',
+                        lineWidth: 10,
+                        dirArrowStyle: true//轨迹线上方向箭头显示
+                    },
+                    pathTolerance: 1,//绘制轨迹线的简化参数，默认为2
+                    keyPointTolerance: -1,//绘制中间节点的简化参数
+                    keyPointStyle:{//轨迹节点的绘制样式
+                        radius:  1,// 点的半径
+                        fillStyle: 'gray',//  填充色，比如 red, rgb(255,0,0), rgba(0,0,0,1)等
+                        strokeStyle: 'gray',// 描边色
+                        lineWidth: 1,// 描边宽度
+                    },
+                    pathNavigatorStyle:{//轨迹巡航器的默认样式
+                        width: 16,// 巡航器形状宽度
+                        height: 16,// 巡航器形状高度
+                        initRotateDegree: 0,// 初始旋转角度，默认0
+                        autoRotate: true,// 是否根据路径方向进行角度旋转（相对于正上方向），默认true
+                        content: 'defaultPathNavigator', //巡航器的内容，详见下
+                        fillStyle:  'red',//  填充色，比如 red, rgb(255,0,0), rgba(0,0,0,1)等
+                        strokeStyle: 'green',// 描边色
+                        lineWidth: 1,// 描边宽度
+                        //pathLinePassedStyle: {},// 巡航器经过的路径的样式，属性取值见上方 pathLineStyle
+                    },
+                    getPathStyle: function(pathItem, zoom) {//根据轨迹索引和zoom返回样式配置
+
+                        let color = dataSrcTColors[pathItem.pathIndex];
+
+                        console.log(`${pathItem.pathIndex},${color}`);
+
+                        return {
+                            pathLineStyle: {
+                                strokeStyle: color,
+                                lineWidth: 5
+                            }
+                        };
+                    }
+                }
+            });
+
+            /*
+            //这里构建两条简单的轨迹，仅作示例
+            pathSimplifierIns.setData([{
+                name: '轨迹0',
+                path: [
+                    [100.340417, 27.376994],
+                    [108.426354, 37.827452],
+                    [113.392174, 31.208439],
+                    [124.905846, 42.232876]
+                ]
+            },
+                {
+                    name: '轨迹01',
+                    path: [
+                        [100.340417, 27.376994],
+                        [108.426354, 37.827452]
+                    ]
+                },
+                {
+                    name: '轨迹02',
+                    path: [
+                        [108.426354, 37.827452],
+                        [113.392174, 31.208439]
+                    ]
+                },
+                {
+                    name: '轨迹03',
+                    path: [
+                        [113.392174, 31.208439],
+                        [124.905846, 42.232876]
+                    ]
+                }
+            ]);
+            */
+
+            //向地图添加图像点信息
+            _SimpleInfoWindow = SimpleInfoWindow;
+        }
+    }
+
+    //上一个点
+    function prepoint() {
+        if(navg == null) return;
+
+        let cursor = navg.getCursor();//获取巡航器当前位置
+        if(curosr.idx > 0){
+            navg.moveToPoint(cursor.idx - 1, 0);//移动到上一个点位置
+            navg.resume();//恢复巡航
+            navg.pause();//暂停
+        }
+        console.log(`上一个点: ${cursor.idx},${cursor.tail}`);
+    }
+
+    //总点数
+    let totalPoint = 0;
+    //下一个点
+    function nextpoint() {
+        if(navg == null) return;
+
+        let cursor = navg.getCursor();//获取巡航器当前位置
+        if(cursor.idx < totalPoint - 1){
+            navg.moveToPoint(cursor.idx + 1, 0);//移动到下一个点位置
+            navg.resume();//恢复巡航
+            navg.pause();//暂停
+        }
+        console.log(`下一个点: ${cursor.idx},${cursor.tail}`);
+    }
+
+
+    let baseSpeed = 3000;//基本速度
+
+    function createNav() {
+        //创建一个巡航器
+        navg = pathSimplifierIns.createPathNavigator(0,  {
+            loop: false, //循环播放
+            speed: 3000
+        });
+
+        navg.on('start', function () {
+            //alert("start evt");
+            console.log('start');
+        });
+
+        navg.on('pause', function () {
+            //alert("pause evt");
+            console.log('pause');
+        });
+
+        navg.on('move', function () {
+            //console.log(count++);
+            let cursor = navg.getCursor();
+
+            curIndex = cursor.idx;
+
+            let espeed = speedIArray[cursor.idx];
+            //根据不同分段设置不同位移速度
+            let curSpeed = baseSpeed + 3000 * espeed;
+            navg.setSpeed(curSpeed);
+
+            console.log(`${cursor.idx}/${totalPoint},${curSpeed}`);
+        });
+
+        navg.on('stop', function () {
+            //alert("stop evt");
+            console.log('stop');
+        });
+    }
+
+    let count = 0;
+
+    //当前游标所在的定位点序号
+    let curIndex = 0;
+
+    function startPlay() {
+        if(navg != null)
+            navg.start();
+    }
+
+    function stopPlay() {
+        if(navg != null)
+            navg.stop();
+    }
+
+    function pausePlay() {
+        if(navg != null)
+            navg.pause();
+    }
+
+    function resumePlay() {
+        if(navg != null)
+            navg.resume();
+    }
+
+    function reset() {
+        if(navg != null){
+            navg.moveToPoint(0, 0);
+            navg.pause();
+        }
+    }
+
+    let service = axios.create({
+        baseURL: 'http://127.0.0.1:9996/', //url地址
+        timeout: 18000,
+    });
+
+    //查询设备轨迹数据
+    function searchTrace(data) {
+        return service({
+            url: 'TLApi/Trace',
+            method: 'post',
+            data: data
+        });
+    }
+
+    //颜色值
+    const tcolors = [
+        'green',
+        'blue',
+        'yellow',
+        'violet',
+        'red'
+    ];
+
+    let dataSrcTColors = [];
+
+    let origiSegmentDataSrc = [];
+    //let segmentPathData = [];
+    //let fullPathData = [];
+    //不同路段速度增量
+    let speedIArray = [];
+
+
+
+    //构造巡航器数据源
+    function integratePathData(fullData, segmentData) {
+        let dataSrc = [];
+
+        dataSrc.push({name: '完整轨迹', path: fullData});
+        //不同速度范围轨迹段
+        for(idx in segmentData){
+            dataSrc.push({name: `轨迹段${idx}`, path: segmentData[idx]});
+        }
+
+        return dataSrc;
+    }
+
+    //获取原始定位数据
+    function getOriginalData(fidx, sidx) {
+        let fItem = origiSegmentDataSrc[fidx];
+        let ret = fItem.Items[sidx];
+        return ret;
+    }
+    
+    function integrateDataSrc(origSegments) {
+        //重置轨迹段颜色映射对象
+        dataSrcTColors = [];
+        dataSrcTColors.push("gray");
+
+        let segmentPathData = [];
+        let fullPathData = [];
+        speedIArray = [];
+
+        for(index in origSegments){
+            let seg = origSegments[index];
+            //dataSrcTColors.push(tcolors[seg.ESpeed]);
+            dataSrcTColors.push(seg.Color);
+
+            //重新构造经纬度
+            let arr = [];
+            for(a of seg.Items){
+                let point = [a.Lon +a.OffsetLon, a.Lat + a.OffsetLat];
+                arr.push(point);
+
+                fullPathData.push(point);
+
+                speedIArray.push(seg.ESpeed);
+            }
+
+            segmentPathData.push(arr);
+        }
+
+        totalPoint = fullPathData.length;
+
+        console.log(`总点数:${totalPoint}`);
+
+        return {fullData: fullPathData, segmentData: segmentPathData};
+    }
+
+    //图像图标记录列表
+    let markerList = [];
+    let mpointMap = new Map();
+
+
+    //查询多媒体记录点
+    function getMPoint(key) {
+        if(mpointMap.size > 0){
+            return mpointMap.get(key);
+        }
+        return null;
+    }
+
+    //为地图添加图像图标
+    function addImgMarkers(mpoints) {
+        if(mpointMap.size > 0){
+            mpointMap.clear();
+        }
+
+        markerList = [];
+
+        let index = 1;
+        for(point of mpoints){
+
+            if(point.MediaType != 0x00) continue;//非图像文件则跳过
+
+            //用字典记录
+            mpointMap.set(point.Key, point);
+
+            try{
+                //【注意】下面marker 的声明只能用 let 如果使用 var 去声明，则在下面的 AMap.event.addListener 时全部记录的是最后一个marker
+                //点击不同的marker 都是传入的都是最后声明的marker
+                let marker = new AMap.Marker({
+                    map: map,
+                    zIndex: 99999,
+                    position: new AMap.LngLat(point.Lon + point.OffsetLon, point.Lat + point.OffsetLat),
+                    extData: point.Key
+                });
+
+                //marker 点击时打开
+                AMap.event.addListener(marker, 'click', function() {
+                    openInfoWin(marker);
+                });
+
+                markerList.push(marker);
+            }
+            catch (error){
+                debugger;
+                console.log(error);
+            }
+        }
+    }
+
+    function openInfoWin(marker) {
+        let mpoint = getMPoint(marker.G.extData);
+
+        if(mpoint == null) return;
+
+        let body = `<div><p>这里是内容。</p></hr>` +
+            `<img src="${mpoint.Url}" style="width: 300px;height: 200px;"/>` +
+            '</div>';
+
+        //创建简单信息窗口实例
+        let infoWindow = new _SimpleInfoWindow({
+            infoTitle: '<strong>这里是标题</strong>',
+            infoBody: body,
+            //基点指向marker的头部位置
+            offset: new AMap.Pixel(0, -31)
+        });
+
+        infoWindow.open(map, marker.getPosition());
+    }
+
+    //将地图之前添加的图标移除掉
+    function removeMarkers(markerList) {
+        if(markerList != null && markerList.length > 0){
+            map.remove(markerList);//删除多个图标
+        }
+    }
+
+    function removedMarkers() {
+        removeMarkers(markerList);
+    }
+
+    function search() {
+        if (navg != null) {
+            navg.destroy();
+            //navg = null;
+
+            if (pathSimplifierIns != null) {
+                pathSimplifierIns.setData(null);
+            }
+        }
+
+            let data = {
+                TerminalKey: '闽ATB981蓝',
+                Begin: '2017-11-10 09:00:17',
+                End: '2017-11-10 15:30:17'
+            };
+
+            searchTrace(data).then(resp => {
+                if (resp.data.Code == 0 && resp.data.Result != null) {
+
+                    let traceResult = {
+                        TraceItems : resp.data.Result.TraceItems,//轨迹分段集合
+                        MediaItems : resp.data.Result.MediaItems,//多媒体数据点集合
+                        PointMileage: resp.data.Result.PointMileage//全路段里程+位置点数统计
+                    }
+
+                    //轨迹点
+                    origiSegmentDataSrc = traceResult.TraceItems;
+
+                    let dsrc = integrateDataSrc(origiSegmentDataSrc);
+                    let pathdata = integratePathData(dsrc.fullData, dsrc.segmentData);
+
+                    if (pathSimplifierIns != null) {
+                        pathSimplifierIns.setData(pathdata);
+
+                        createNav();
+                    }
+
+                    //图像点
+                    //删除地图上之前添加的图标点
+                    removeMarkers(markerList);
+
+                    //添加新图标点
+                    if(traceResult.MediaItems != null && traceResult.MediaItems.length > 0){
+                        addImgMarkers(traceResult.MediaItems);
+                    }
+
+                    //里程+点数信息
+                    if(traceResult.PointMileage != null){
+                        let e = document.getElementById('info');
+                        e.innerHTML = `总位置点数:${traceResult.PointMileage.TotalPoint},累计里程:${traceResult.PointMileage.TotalMileage}`;
+                    }
+                }
+                else {
+                    alert('查询轨迹出错!');
+                }
+            }).catch(error => {
+                alert('查询轨迹失败!');
+            });
+    }
+
+</script>

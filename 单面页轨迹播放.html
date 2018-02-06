@@ -1,0 +1,349 @@
+<!doctype html>
+<html lang="zh-CN">
+
+<head>
+    <!-- 原始地址：//webapi.amap.com/ui/1.0/ui/misc/PathSimplifier/examples/simple-demo.html -->
+    <base href="//webapi.amap.com/ui/1.0/ui/misc/PathSimplifier/examples/" />
+    <meta charset="utf-8">
+    <meta name="viewport" content="initial-scale=1.0, user-scalable=no, width=device-width">
+    <title>单面页轨迹播放</title>
+    <style>
+        html,
+        body,
+        #container {
+            width: 100%;
+            height: 100%;
+            margin: 0px;
+        }
+    </style>
+</head>
+
+<body>
+    <div style="border: solid 1px;margin-left: 2px;">
+        <label>设备号:</label><input type="text" id="key" style="width: 200px;" value="闽JT5136蓝"/>
+        <label>开始时间:</label><input type="text" id="begin" style="width: 200px;" value=""/>
+        <label>结束时间:</label><input type="text" id="end" style="width: 200px;" value=""/>
+    </div>
+    <div style="border: solid 1px;margin-left: 2px;">
+        <button onclick="loadData()" id="load">加载数据</button>
+        <button onclick="startPlay()" id="play" disabled>开始播放</button>
+        <button onclick="stopPlay()" id="stop" disabled>停止播放</button>
+        <button onclick="resumePlay()" id="resumeplay" disabled>继续播放</button>
+        <span style="font-weight: bold; color: chocolate;">轨迹信息:</span>
+        <span id="traceinfo" style="font-weight: bold;"></span>
+    </div>
+</div>
+<div id="container"></div>
+</body>
+</html>
+
+<script src="https://cdn.bootcss.com/axios/0.17.1/axios.min.js"></script>
+
+<!-- 引入组件 -->
+<script type="text/javascript" src='//webapi.amap.com/maps?v=1.4.0&key=61b1e7255e7b3c83410a06ae4362a463'></script>
+<!-- UI组件库 1.0 -->
+<script src="//webapi.amap.com/ui/1.0/main.js?v=1.0.11"></script>
+
+<script type="text/javascript">
+
+    let begin = document.getElementById("begin");
+    let end = document.getElementById("end");
+
+    let date = new Date();
+
+    let dayBegin = dateTimeBegin(date);
+    let dayEnd = dateTimeEnd(date);
+
+    begin.value = dateTimeFormat(dayBegin, 'yyyy-MM-dd HH:mm:ss');
+    end.value = dateTimeFormat(dayEnd, 'yyyy-MM-dd HH:mm:ss');
+
+    /*********************************网络接口请求***************************************/
+
+    const service = axios.create({
+        baseURL: "http://121.207.230.165:6999", //url地址
+        timeout: 18000,
+    });
+
+    //拦截请求
+    service.interceptors.request.use(config => {
+
+        return config;
+    }, error => {
+        console.log("请求出问题了:" + error);
+        return Promise.reject(error);
+    });
+
+    //拦截响应
+    service.interceptors.response.use(response => {
+        const res = response.data;
+        if (res.Code != 0) {
+        }
+        return res;
+    }, error => {
+        console.log("响应错问题了" + error);
+
+        return Promise.reject(error);
+    });
+
+    //查询轨迹数据
+    function getTrace(key, begin, end) {
+        return service({
+            url: `Lbs/ReadTrace?key=${key}&poi=true&appId=ckb&begin=${begin}&end=${end}&pageIndex=0&pageSize=10000`,
+            method: 'get'
+        });
+    }
+
+    /*********************************网络接口请求***************************************/
+
+
+    /*************************************地图操作************************************/
+
+    //创建地图
+    let map = new AMap.Map('container', {
+        zoom: 13
+    });
+
+    let pathSimplifierIns = null;
+
+    AMapUI.load(['ui/misc/PathSimplifier', 'lib/$'], function(PathSimplifier, $) {
+
+        if (!PathSimplifier.supportCanvas) {
+            alert('当前环境不支持 Canvas！');
+            return;
+        }
+
+        pathSimplifierIns = new PathSimplifier({
+            zIndex: 100,
+            //autoSetFitView:false,
+            map: map, //所属的地图实例
+
+            getPath: function(pathData, pathIndex) {
+
+                return pathData.path;
+            },
+            getHoverTitle: function(pathData, pathIndex, pointIndex) {
+
+                if (pointIndex >= 0) {
+                    //point
+                    return pathData.name + '，点：' + pointIndex + '/' + pathData.path.length;
+                }
+
+                return pathData.name + '，点数量' + pathData.path.length;
+            },
+            renderOptions: {
+                //轨迹线的样式
+                pathLineStyle: {
+                    strokeStyle: 'blue',
+                    lineWidth: 3,
+                    dirArrowStyle: true//轨迹线上方向箭头显示
+                },
+                pathTolerance: 1,//绘制轨迹线的简化参数，默认为2
+                keyPointTolerance: -1,//绘制中间节点的简化参数
+                keyPointStyle:{//轨迹节点的绘制样式
+                    radius:  1,// 点的半径
+                    fillStyle: 'gray',//  填充色，比如 red, rgb(255,0,0), rgba(0,0,0,1)等
+                    strokeStyle: 'gray',// 描边色
+                    lineWidth: 1,// 描边宽度
+                },
+                pathNavigatorStyle:{//轨迹巡航器的默认样式
+                    width: 20,// 巡航器形状宽度
+                    height: 20,// 巡航器形状高度
+                    initRotateDegree: 0,// 初始旋转角度，默认0
+                    autoRotate: true,// 是否根据路径方向进行角度旋转（相对于正上方向），默认true
+                    //content: 'defaultPathNavigator', //巡航器的内容，详见下
+                    fillStyle:  'red',//  填充色，比如 red, rgb(255,0,0), rgba(0,0,0,1)等
+                    strokeStyle: 'red',// 描边色
+                    lineWidth: 2,// 描边宽度
+                    //pathLinePassedStyle: {},// 巡航器经过的路径的样式，属性取值见上方 pathLineStyle
+                }
+            }
+        });
+
+        window.pathSimplifierIns = pathSimplifierIns;
+    });
+
+    var traceData = [];
+    function loadData() {
+        disable("play");
+        disable("stop");
+        disable("resumeplay");
+
+        traceData = [];
+        //设置数据
+        pathSimplifierIns.setData([{
+            name: '轨迹路线',
+            path: traceData
+        }]);
+
+        //请求轨迹数据
+
+        debugger;
+
+        let key = document.getElementById("key").value;
+        let begin = document.getElementById("begin").value;
+        let end = document.getElementById("end").value;
+
+        if(key == undefined || key == null || key.length == 0){
+            alert("请输入设备号!");
+            return;
+        }
+
+        if(begin == undefined || begin == null || begin.length == 0){
+            alert("请输入开始时间!");
+            return;
+        }
+
+        if(end == undefined || end == null || end.length == 0){
+            alert("请输入结束时间!");
+            return;
+        }
+
+        //轨迹请求
+        getTrace(key, begin, end).then(resp =>{
+
+            if(resp == undefined || resp == null) return;
+
+            if(resp.Code == 0 && resp.Result != null){
+                changeData(resp.Result);
+
+                let e = document.getElementById("traceinfo");
+                let fl = null;
+
+
+                if(traceData.length > 0) {
+                    //设置数据
+                    pathSimplifierIns.setData([{
+                        name: '轨迹路线',
+                        path: traceData
+                    }]);
+
+                    enable("play");
+                    enable("stop");
+                    enable("resumeplay");
+
+                    lf = `FRevTime:${resp.Result[0].ReceiveTime},LRevTime:${resp.Result[resp.Result.length - 1].ReceiveTime}`;
+
+                    e.innerText = `点数[${traceData.length}],${lf}`;
+                }
+            }
+            else{
+                alert(resp.Message);
+            }
+        }).catch(error =>{
+            console.log(error);
+            alert("轨迹接口调用执行异常!");
+        });
+    }
+
+    //数据转换
+    function changeData(data) {
+        if(data == undefined || data == null || data.length == 0) return;
+
+        for(let i = 0; i < data.length; i++){
+            let item = data[i];
+            let lon = item.Lon + item.OffsetLon;
+            let lat = item.Lat + item.OffsetLat;
+            traceData.push([lon, lat]);
+        }
+    }
+
+    let navg = null;
+    //开始播放
+    function startPlay() {
+        if(navg != null) {
+            navg.destroy();
+            navg = null;
+        }
+
+        //对第一条线路（即索引 0）创建一个巡航器
+        navg = pathSimplifierIns.createPathNavigator(0, {
+            loop: false, //循环播放
+            speed: 3000 //巡航速度，单位千米/小时
+        });
+
+        navg.start();
+    }
+
+    //停止播放
+    function stopPlay() {
+        if(navg == undefined || navg == null) return;
+
+        navg.stop();
+    }
+
+    //恢复播放
+    function resumePlay() {
+        if(navg != null) navg.resume();
+    }
+
+    /********************************************************************************/
+
+
+    /**********************************辅助*******************************************/
+
+    function disable(id) {
+        let e = document.getElementById(id);
+        if(e != undefined && e != null) {
+            e.disabled = true;//不可编辑状态
+        }
+    }
+
+    function enable(id) {
+        let e = document.getElementById(id);
+        if(e != undefined && e != null) {
+            e.disabled = false;//可编辑状态
+        }
+    }
+
+    /**
+     * 返回时间对象当天的开始时间对象，即yyyy-MM-dd 00:00:00
+     * @param {时间对象} dateTime
+     */
+    function dateTimeBegin(dateTime) {
+        if (dateTime instanceof Date == false) return null;
+
+        return new Date(dateTime.getFullYear(), dateTime.getMonth(), dateTime.getDate());
+    }
+
+    /**
+     * 返回时间对象当天的最后时间对象，即yyyy-MM-dd 23:59:59
+     * @param {时间对象} dateTime
+     */
+    function dateTimeEnd(dateTime) {
+        if (dateTime instanceof Date == false) return null;
+
+        return new Date(dateTime.getFullYear(), dateTime.getMonth(), dateTime.getDate(), 23, 59, 59);
+    }
+
+    /**
+     * 对Date的扩展，将 Date 转化为指定格式的String
+     * 月(M)、日(d)、小时(h)、分(m)、秒(s)、季度(q) 可以用 1-2 个占位符，
+     * 年(y)可以用 1-4 个占位符，毫秒(S)只能用 1 个占位符(是 1-3 位的数字)
+     * 例子：
+     * (new Date()).Format("yyyy-MM-dd HH:mm:ss.S") ==> 2006-07-02 08:09:04.423
+     * (new Date()).Format("yyyy-M-d H:m:s.S")      ==> 2006-7-2 8:9:4.18
+     *
+     * @param {时间对象} dateTime
+     * @param {格式化字符串} fmt
+     */
+    function dateTimeFormat(dateTime, fmt) {
+        if (dateTime instanceof Date == false) return null;
+
+        var o = {
+            "M+": dateTime.getMonth() + 1, //月份
+            "d+": dateTime.getDate(), //日
+            "H+": dateTime.getHours(), //小时
+            "m+": dateTime.getMinutes(), //分
+            "s+": dateTime.getSeconds(), //秒
+            "q+": Math.floor((dateTime.getMonth() + 3) / 3), //季度
+            "S": dateTime.getMilliseconds() //毫秒
+        };
+        if (/(y+)/.test(fmt)) fmt = fmt.replace(RegExp.$1, (dateTime.getFullYear() + "").substr(4 - RegExp.$1.length));
+        for (var k in o)
+            if (new RegExp("(" + k + ")").test(fmt)) fmt = fmt.replace(RegExp.$1, (RegExp.$1.length == 1) ? (o[k]) : (("00" + o[k]).substr(("" + o[k]).length)));
+        return fmt;
+    }
+
+    /*********************************************************************************/
+
+</script>

@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>iview example</title>
+    <link rel="stylesheet" type="text/css" href="http://unpkg.com/iview/dist/styles/iview.css">
+    <script type="text/javascript" src="http://vuejs.org/js/vue.min.js"></script>
+    <script type="text/javascript" src="http://unpkg.com/iview/dist/iview.min.js"></script>
+</head>
+<body>
+<div id="app">
+    <i-button @click="show">Click me!</i-button>
+    <Modal v-model="visible" title="Welcome">Welcome to iView</Modal>
+    <template>
+        <Slider v-model="value8" @change="sliderChange" @input="sliderInput"></Slider>
+    </template>
+    <p>{{ inputinfo }}</p>
+    <p>{{ changeinfo }}</p>
+</div>
+<script>
+    new Vue({
+        el: '#app',
+        data: {
+            visible: false,
+            value8: 20,
+            inputinfo: '',
+            changeinfo: ''
+        },
+        methods: {
+            show: function () {
+                this.visible = true;
+            },
+            sliderChange: function (value) {
+                this.changeinfo = `change:${this.value8},${value}`;
+            },
+            sliderInput: function (value) {
+                this.inputinfo = `input:${this.value8},${value}`;
+            }
+        }
+    })
+</script>
+</body>
+</html>

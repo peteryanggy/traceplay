@@ -1,0 +1,37 @@
+<html>
+<head>
+    <title>JS操作文本文件</title>
+</head>
+<body>
+
+<script>
+    var arr = 1;
+    function Write2Text()
+    {
+        var fso = new ActiveXObject("Scripting.FileSystemObject");
+        var f = fso.CreateTextFile("a.txt", true);
+        f.write(arr);
+        f.Close();
+    }
+</script>
+<input type=button value="Write" onclick="Write2Text()">
+
+<script>
+    function GetHeader(src) {
+        var ForReading=1;
+        var fso=new ActiveXObject("Scripting.FileSystemObject");
+        var f=fso.OpenTextFile(src,ForReading);
+        return(f.ReadAll());
+    }
+    function ReadText(){
+        var arr=GetHeader("a.txt").split("\r\n");
+        for(var i=0;i<arr.length;i++){
+            alert("第"+(i+1)+"行数据为:"+arr[i]);
+        }
+    }
+</script>
+
+<input type=button value="Read" onclick="ReadText()">
+
+</body>
+</html>
