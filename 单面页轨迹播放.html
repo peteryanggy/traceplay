@@ -168,6 +168,9 @@
         disable("stop");
         disable("resumeplay");
 
+        let traceinfo = document.getElementById("traceinfo");
+        traceinfo.innerText = "";
+
         traceData = [];
         //设置数据
         pathSimplifierIns.setData([{
@@ -206,9 +209,7 @@
             if(resp.Code == 0 && resp.Result != null){
                 changeData(resp.Result);
 
-                let e = document.getElementById("traceinfo");
                 let fl = null;
-
 
                 if(traceData.length > 0) {
                     //设置数据
@@ -223,7 +224,7 @@
 
                     lf = `FRevTime:${resp.Result[0].ReceiveTime},LRevTime:${resp.Result[resp.Result.length - 1].ReceiveTime}`;
 
-                    e.innerText = `点数[${traceData.length}],${lf}`;
+                    traceinfo.innerText = `点数[${traceData.length}],${lf}`;
                 }
             }
             else{
