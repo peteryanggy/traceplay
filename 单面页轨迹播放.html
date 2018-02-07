@@ -15,6 +15,20 @@
             height: 100%;
             margin: 0px;
         }
+
+        #shade {
+            width:100%;
+            height:100%;
+            background-color: darkgray;
+            position:absolute;
+            top:0;
+            left:0;
+            z-index:200;
+            opacity:0.8;
+            /*兼容IE8及以下版本浏览器*/
+            filter: alpha(opacity=30);
+            display:none;
+        }
     </style>
 </head>
 
@@ -29,11 +43,12 @@
         <button onclick="startPlay()" id="play" disabled>开始播放</button>
         <button onclick="stopPlay()" id="stop" disabled>停止播放</button>
         <button onclick="resumePlay()" id="resumeplay" disabled>继续播放</button>
+        <label for="">巡航速度</label><input type="number" id="navgspeed" max="500000" min="1000" step="500" value="3000" onchange="speedChange()">
         <span style="font-weight: bold; color: chocolate;">轨迹信息:</span>
         <span id="traceinfo" style="font-weight: bold;"></span>
     </div>
-</div>
-<div id="container"></div>
+    <div id="container"></div>
+    <!--<div id="shade" style="display: none;"></div>-->
 </body>
 </html>
 
@@ -179,9 +194,6 @@
         }]);
 
         //请求轨迹数据
-
-        debugger;
-
         let key = document.getElementById("key").value;
         let begin = document.getElementById("begin").value;
         let end = document.getElementById("end").value;
@@ -201,10 +213,14 @@
             return;
         }
 
+        display("shade", true);
+
         //轨迹请求
         getTrace(key, begin, end).then(resp =>{
 
             if(resp == undefined || resp == null) return;
+
+            display("shade", false);
 
             if(resp.Code == 0 && resp.Result != null){
                 changeData(resp.Result);
@@ -231,6 +247,7 @@
                 alert(resp.Message);
             }
         }).catch(error =>{
+            display("shade", false);
             console.log(error);
             alert("轨迹接口调用执行异常!");
         });
@@ -256,10 +273,11 @@
             navg = null;
         }
 
+        let speed = document.getElementById("navgspeed").value;
         //对第一条线路（即索引 0）创建一个巡航器
         navg = pathSimplifierIns.createPathNavigator(0, {
             loop: false, //循环播放
-            speed: 3000 //巡航速度，单位千米/小时
+            speed: speed //巡航速度，单位千米/小时
         });
 
         navg.start();
@@ -275,6 +293,28 @@
     //恢复播放
     function resumePlay() {
         if(navg != null) navg.resume();
+    }
+
+    //设置巡航速度
+    function setNavgSpeed(speed) {
+        if(navg != null) {
+            navg.setSpeed(speed);
+        }
+    }
+
+    function speedChange() {
+        let speed = document.getElementById("navgspeed").value;
+        setNavgSpeed(speed);
+    }
+
+    function display(id, show) {
+        let e = document.getElementById(id);
+        if(e == undefined || e == undefined) return;
+
+        if(show)
+            e.setAttribute("display", "block");
+        else
+            e.setAttribute("display", "none");
     }
 
     /********************************************************************************/
