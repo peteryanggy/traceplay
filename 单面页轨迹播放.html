@@ -19,15 +19,19 @@
         #shade {
             width:100%;
             height:100%;
-            background-color: darkgray;
+            background-color: #cccccc;
             position:absolute;
             top:0;
             left:0;
             z-index:200;
-            opacity:0.8;
+            opacity:0.3;
             /*兼容IE8及以下版本浏览器*/
             filter: alpha(opacity=30);
             display:none;
+        }
+
+        .center{
+            margin-left: 50%;
         }
     </style>
 </head>
@@ -48,7 +52,9 @@
         <span id="traceinfo" style="font-weight: bold;"></span>
     </div>
     <div id="container"></div>
-    <!--<div id="shade" style="display: none;"></div>-->
+    <div id="shade" style="display: none;">
+        <span class="center" style="font-size: larger; font-weight: bold;color: blue;">数据正在加载中......</span>
+    </div>
 </body>
 </html>
 
@@ -307,16 +313,6 @@
         setNavgSpeed(speed);
     }
 
-    function display(id, show) {
-        let e = document.getElementById(id);
-        if(e == undefined || e == undefined) return;
-
-        if(show)
-            e.setAttribute("display", "block");
-        else
-            e.setAttribute("display", "none");
-    }
-
     /********************************************************************************/
 
 
@@ -334,6 +330,16 @@
         if(e != undefined && e != null) {
             e.disabled = false;//可编辑状态
         }
+    }
+
+    function display(id, show) {
+        let e = document.getElementById(id);
+        if(e == undefined || e == undefined) return;
+
+        if(show)
+            e.style.display = "block";
+        else
+            e.style.display = "none";
     }
 
     /**
